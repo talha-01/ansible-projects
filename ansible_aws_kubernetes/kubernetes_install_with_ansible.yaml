@@ -1,0 +1,176 @@
+---
+- hosts: localhost
+  gather_facts: no
+  tasks:
+  - name: gather vpc facts
+    ec2_vpc_net_facts:
+      filters: 
+        "tag:Name": Default
+    register: vpc_facts
+  - name: create security group for master
+    ec2_group: 
+      name: master_sg
+      description: kubernetes master node security group
+      vpc_id: "{{ vpc_facts.vpcs[0].vpc_id }}"
+      rules: 
+      - proto: tcp 
+        ports: 
+        - 6443
+        - 2379-2380
+        - 10250-1252
+        - 22
+        - 8080
+        - 80
+        cidr_ip: 0.0.0.0/0
+  - name: create security group for workers
+    ec2_group: 
+      name: worker_sg
+      description: kubernetes master node security group
+      vpc_id: "{{ vpc_facts.vpcs[0].vpc_id }}"
+      rules: 
+      - proto: tcp 
+        ports: 
+        - 10250
+        - 30000-32767
+        - 22
+        - 8080
+        - 80
+        cidr_ip: 0.0.0.0/0
+  - name: gather subnet facts
+    ec2_vpc_subnet_facts:
+      filters: 
+        vpc-id: "{{ vpc_facts.vpcs[0].vpc_id }}"
+    register: subnet_facts
+  - name: crate the master node
+    ec2: 
+      instance_type: t2.micro
+      keypair: talha-virginia
+      image: ami-0dba2cb6798deb6d8
+      assign_public_ip: yes
+      vpc_subnet_id: "{{ subnet_facts.subnets[0].subnet_id }}"
+      group: master_sg
+      region: us-east-1
+      wait: true
+      count: 1
+      instance_tags: 
+        server: kubernetes
+        role: master
+    register: master_instance
+  - name: add the master to inventory
+    add_host:
+      hostname: "{{ master_instance.instances[0].public_ip }}"
+      groups: 
+      - master_node
+      - kubernetes_cluster
+      ansible_ssh_common_args: "-o StrictHostKeyChecking=no"
+      ansible_ssh_private_key_file: ~/.aws/keys/talha-virginia.pem    
+  - name: create the worker node
+    ec2: 
+      instance_type: t2.micro
+      keypair: talha-virginia
+      image: ami-0dba2cb6798deb6d8
+      assign_public_ip: yes
+      vpc_subnet_id: "{{ subnet_facts.subnets[0].subnet_id }}"
+      group: worker_sg
+      region: us-east-1
+      wait: true
+      count: 1
+      instance_tags: 
+        server: kubernetes
+        role: worker
+    register: worker_instance
+  - name: add the worker to inventory
+    add_host:
+      hostname: "{{ worker_instance.instances[0].public_ip }}"
+      groups: 
+      - worker_node
+      - kubernetes_cluster
+      ansible_ssh_common_args: "-o StrictHostKeyChecking=no"
+      ansible_ssh_private_key_file: ~/.aws/keys/talha-virginia.pem
+- hosts: kubernetes_cluster
+  gather_facts: no
+  remote_user: ubuntu
+  become: yes
+  tasks: 
+  - name: wait for SSH connection
+    wait_for_connection:
+      delay: 5
+      timeout: 90
+  - name: update the OS
+    shell: apt update 
+  - name: install docker.io
+    apt: 
+      name: docker.io
+      state: present
+  - name: start and enable docker service
+    service:
+      name: docker
+      state: started
+      enabled: yes
+  - name: add ubuntu user to docker group
+    user:
+        name: ubuntu
+        groups: docker
+        append: yes
+  - name: install apt-transport-https 
+    apt:
+      name: apt-transport-https
+      state: present
+  - name: install k8s packages
+    shell: |
+      curl -s https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key add -
+      apt-add-repository "deb http://apt.kubernetes.io/ kubernetes-xenial main"
+  - name: update the OS
+    apt: 
+      name: '*'
+      state: latest
+  - name: install kubelet, kubeadm, kubectl
+    apt: 
+      pkg: 
+      - kubelet
+      - kubeadm
+      - kubectl
+      state: present
+  - name: start and enable kubelet service
+    service: 
+      name: kubelet
+      state: started
+      enabled: yes
+- hosts: master_node
+  gather_facts: no
+  remote_user: ubuntu
+  become: yes
+  tasks:
+  - name: initialize kubernetes
+    shell: kubeadm init --pod-network-cidr=10.244.0.0/16 --ignore-preflight-errors=NumCPU
+  - name: set up local kubeconfig on master node
+    file:
+      path: /home/ubuntu/.kube
+      state: directory
+      owner: ubuntu
+      group: ubuntu
+      mode: '0700'
+  - name: copy the configuration file
+    shell: |
+      cp -i /etc/kubernetes/admin.conf /home/ubuntu/.kube/config
+      chown ubuntu:ubuntu /home/ubuntu/.kube/config
+  - name: update the iptables
+    shell: |
+      sysctl -w net.bridge.bridge-nf-call-iptables = 1
+      sysctl -p
+  - name: install network add-on
+    become: no
+    shell: kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/master/Documentation/kube-flannel.yml
+  - name: get the joining command
+    shell: kubeadm token create --print-join-command | grep -i 'kubeadm join'
+    register: join_command
+  - name: store the command as a variable
+    add_host: 
+      name: master_node
+      join_worker: "{{ join_command.stdout.strip() }}"
+- hosts: worker_node
+  remote_user: ubuntu
+  become: yes
+  tasks:
+  - name: join the worker to k8s cluster
+    shell: "{{ hostvars['master_node']['join_worker'] }}"
