@@ -1,0 +1,6 @@
+---
+- shell: |
+    echo "USE ecomdb; show tables like 'products'; " | mysql
+  register: resultOfShowTables
+- debug: 
+    var: resultOfShowTables

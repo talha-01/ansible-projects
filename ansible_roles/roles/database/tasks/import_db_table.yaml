@@ -1,0 +1,6 @@
+---
+- mysql_db:
+    name: ecomdb
+    state: import
+    target: ~/db-load-script.sql
+  when: resultOfShowTables.stdout == ""

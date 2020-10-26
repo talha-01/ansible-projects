@@ -1,0 +1,6 @@
+---
+- lineinfile: 
+    path: /var/www/html/index.php
+    regexp: '172\.20\.1\.101'
+    line: "$link = mysqli_connect('{{ groups['server_database'] | join('') }}', 'remoteUser', 'Talha123', 'ecomdb');"
+  # when: not result.stdout == "already cloned..."

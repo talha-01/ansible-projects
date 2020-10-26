@@ -1,0 +1,4 @@
+---
+- copy: 
+    src: db-load-script.sql
+    dest: ~/

@@ -1,0 +1,21 @@
+---
+- name: install mariadb and PyMySQL
+  import_tasks: install_databases.yaml
+- name: start mariadb and enable
+  import_tasks: start_mariadb.yaml
+- name: copy the sql script
+  import_tasks: copy_sql_script.yaml
+- name: create password for the root user
+  import_tasks: create_password.yaml
+- name: copy configuration file
+  import_tasks: copy_conf_file.yaml
+- name: create db user with name 'remoteUser' and password 'clarus1234' with all database privileges
+  import_tasks: create_user.yaml
+- name: create db schema
+  import_tasks: create_db_schema.yaml
+- name: check the table
+  import_tasks: check_table.yaml
+- name: import db table
+  import_tasks: import_db_table.yaml
+- name: restart mariadb
+  import_tasks: restart_database.yaml

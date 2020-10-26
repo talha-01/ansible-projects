@@ -1,0 +1,6 @@
+---
+- mysql_db: 
+    name: ecomdb
+    login_user: root
+    login_password: 'Talha123'
+    state: present

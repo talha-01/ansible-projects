@@ -1,0 +1,10 @@
+---
+- name: db configuration
+  hosts: server_database
+  roles: 
+    - database
+- name: web server configuration
+  hosts: server_webserver
+  become: yes
+  roles: 
+    - webserver

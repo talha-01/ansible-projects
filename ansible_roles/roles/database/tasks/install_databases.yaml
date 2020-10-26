@@ -1,0 +1,9 @@
+---
+- become: yes
+  yum: 
+    name: 
+      - mariadb-server
+      - python3-PyMySQL
+    state: latest
+  register: is_changed
+

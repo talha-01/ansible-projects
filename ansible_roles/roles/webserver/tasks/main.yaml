@@ -1,0 +1,14 @@
+---
+- name: install the latest version of Git, Apache, Php, Php-Mysqlnd
+  import_tasks: install_apps.yaml
+- name: start the server and enable it
+  import_tasks: start_server.yaml
+- name: clone the repo of the website
+  import_tasks: clone_repo.yaml
+- name: Replace a default entry with our own
+  import_tasks: replace_entry.yaml
+- name: disable selinux
+  import_tasks: disable_selinux.yaml
+- name: restart httpd service
+  import_tasks: restart_httpd.yaml
+

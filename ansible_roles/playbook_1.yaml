@@ -1,0 +1,74 @@
+---
+- hosts: localhost
+  gather_facts: 'no'
+  tasks:
+  - name: create key pair
+    ec2_key: 
+      name: last_key
+    register: test_key_pass
+
+  - debug:
+      var: test_key_pass
+  - name: save the key
+    lineinfile: 
+      create: 'yes'
+      path: /home/talha/.aws/keys/last_key.pem
+      line: "{{ test_key_pass.key.private_key }}"
+      mode: 0400
+  - name: gather vpc facts
+    ec2_vpc_net_facts:
+      filters:
+        "tag:Name": Default
+    register: vpc_facts
+  - debug: 
+      var: vpc_facts
+  - name: create security group
+    ec2_group: 
+      name: testSG
+      description: testing ansible
+      vpc_id: "{{ vpc_facts.vpcs[0].vpc_id }}"
+      rules: 
+      - proto: tcp
+        ports: 
+        - 3306
+        - 80
+        - 22
+        cidr_ip: 0.0.0.0/0
+  - name: gather subnet facts
+    ec2_vpc_subnet_facts:
+      filters: 
+        vpc-id: "{{ vpc_facts.vpcs[0].vpc_id }}"
+    register: subnet_facts
+  - debug: 
+      var: subnet_facts
+        
+  - name: create webserver instance
+    ec2: 
+      instance_type: t2.micro
+      keypair: last_key
+      image: ami-098f16afa9edf40be
+      assign_public_ip: yes
+      vpc_subnet_id: "{{ subnet_facts.subnets[0].subnet_id }}"
+      group: testSG
+      wait: 'true'
+      region: us-east-1
+      count: 1
+      instance_tags:
+        Name: ansible
+        server: webserver
+    register: ec2_web
+  - name: create database instance
+    ec2: 
+      instance_type: t2.micro
+      keypair: last_key
+      image: ami-098f16afa9edf40be
+      assign_public_ip: yes
+      vpc_subnet_id: "{{ subnet_facts.subnets[0].subnet_id }}"
+      group: testSG
+      wait: 'true'
+      region: us-east-1
+      count: 1
+      instance_tags:
+        Name: ansible
+        server: database
+    register: ec2_db
