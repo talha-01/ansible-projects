@@ -8,6 +8,5 @@ filters:
 keyed_groups:
   - key: tags['server']
     prefix: 'server'
-    seperator: ''
 hostnames: 
   - ip-address
